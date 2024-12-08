@@ -1,132 +1,148 @@
 import random
+from typing import List, Tuple, Dict
+
+class Ship:
+    def __init__(self, name: str, size: int):
+        self.name = name
+        self.size = size
+        self.hits = 0
+        self.positions: List[Tuple[int, int]] = []
+
+    def is_sunk(self) -> bool:
+        return self.hits >= self.size
 
 class Board:
-    def __init__(self, size=10):
+    def __init__(self, size: int = 10):
         self.size = size
         self.board = [[' ' for _ in range(size)] for _ in range(size)]
-        self.ships = []
+        self.ships: List[Ship] = []
 
-    def place_ship(self, length, is_horizontal, row, col):
-        if is_horizontal:
-            if col + length > self.size:
+    def place_ship(self, ship: Ship, start_pos: Tuple[int, int], horizontal: bool) -> bool:
+        x, y = start_pos
+        positions = []
+
+        # Check if placement is valid
+        for i in range(ship.size):
+            new_x = x + (i if horizontal else 0)
+            new_y = y + (0 if horizontal else i)
+
+            if not (0 <= new_x < self.size and 0 <= new_y < self.size):
                 return False
-            for i in range(length):
-                if self.board[row][col + i] != ' ':
-                    return False
-            for i in range(length):
-                self.board[row][col + i] = 'S'
-        else:
-            if row + length > self.size:
+            if self.board[new_y][new_x] != ' ':
                 return False
-            for i in range(length):
-                if self.board[row + i][col] != ' ':
-                    return False
-            for i in range(length):
-                self.board[row + i][col] = 'S'
-        self.ships.append({'length': length, 'positions': [(row + i if not is_horizontal else row,
-                                                          col + i if is_horizontal else col)
-                                                         for i in range(length)]})
+            positions.append((new_x, new_y))
+
+        # Place ship
+        for pos_x, pos_y in positions:
+            self.board[pos_y][pos_x] = 'S'
+        ship.positions = positions
+        self.ships.append(ship)
         return True
 
-    def receive_attack(self, row, col):
-        if not (0 <= row < self.size and 0 <= col < self.size):
-            return 'Invalid'
-        if self.board[row][col] == 'S':
-            self.board[row][col] = 'H'
-            return 'Hit'
-        elif self.board[row][col] == ' ':
-            self.board[row][col] = 'M'
-            return 'Miss'
-        return 'Already attacked'
-
-    def display(self, hide_ships=True):
-        print('  ' + ' '.join(str(i) for i in range(self.size)))
-        for i in range(self.size):
-            row_display = [self.board[i][j] if not hide_ships or self.board[i][j] in ['H', 'M']
-                          else ' ' for j in range(self.size)]
-            print(f'{i} {" ".join(row_display)}')
+    def receive_attack(self, pos: Tuple[int, int]) -> str:
+        x, y = pos
+        if self.board[y][x] == 'S':
+            self.board[y][x] = 'H'
+            for ship in self.ships:
+                if pos in ship.positions:
+                    ship.hits += 1
+                    if ship.is_sunk():
+                        return f"You sunk my {ship.name}!"
+                    return "Hit!"
+        elif self.board[y][x] == ' ':
+            self.board[y][x] = 'M'
+            return "Miss!"
+        return "Already attacked this position!"
 
 class Game:
     def __init__(self):
         self.player_board = Board()
         self.computer_board = Board()
-        self.setup_game()
+        self.ships = [
+            Ship("Carrier", 5),
+            Ship("Battleship", 4),
+            Ship("Cruiser", 3),
+            Ship("Submarine", 3),
+            Ship("Destroyer", 2)
+        ]
 
     def setup_game(self):
-        ships = [5, 4, 3, 3, 2]  # Standard battleship ship sizes
-        # Place computer's ships
-        for ship in ships:
+        # Place computer ships
+        for ship in self.ships:
             while True:
-                row = random.randint(0, 9)
-                col = random.randint(0, 9)
-                is_horizontal = random.choice([True, False])
-                if self.computer_board.place_ship(ship, is_horizontal, row, col):
+                x = random.randint(0, 9)
+                y = random.randint(0, 9)
+                horizontal = random.choice([True, False])
+                if self.computer_board.place_ship(Ship(ship.name, ship.size), (x, y), horizontal):
                     break
 
-        print("Place your ships!")
-        for ship in ships:
-            self.player_board.display(hide_ships=False)
+        # Place player ships (simplified for now - random placement)
+        for ship in self.ships:
             while True:
-                try:
-                    print(f"\nPlacing ship of length {ship}")
-                    row = int(input("Enter row (0-9): "))
-                    col = int(input("Enter column (0-9): "))
-                    is_horizontal = input("Place horizontally? (y/n): ").lower() == 'y'
-                    if self.player_board.place_ship(ship, is_horizontal, row, col):
-                        break
-                    print("Invalid placement. Try again.")
-                except ValueError:
-                    print("Invalid input. Please enter numbers for row and column.")
+                x = random.randint(0, 9)
+                y = random.randint(0, 9)
+                horizontal = random.choice([True, False])
+                if self.player_board.place_ship(Ship(ship.name, ship.size), (x, y), horizontal):
+                    break
 
-    def play(self):
+    def display_boards(self):
+        print("\nYour Board:")
+        self._print_board(self.player_board)
+        print("\nComputer's Board:")
+        self._print_board(self.computer_board, hide_ships=True)
+
+    def _print_board(self, board: Board, hide_ships: bool = False):
+        print("  0 1 2 3 4 5 6 7 8 9")
+        for i in range(board.size):
+            row = chr(65 + i) + " "
+            for j in range(board.size):
+                cell = board.board[i][j]
+                if hide_ships and cell == 'S':
+                    row += '  '
+                else:
+                    row += cell + " "
+            print(row)
+
+def main():
+    game = Game()
+    print("Welcome to Battleship!")
+    game.setup_game()
+
+    while True:
+        game.display_boards()
+        
+        # Player's turn
         while True:
-            # Player's turn
-            print("\nYour board:")
-            self.player_board.display(hide_ships=False)
-            print("\nComputer's board:")
-            self.computer_board.display()
-
-            # Player attack
-            while True:
-                try:
-                    row = int(input("Enter attack row (0-9): "))
-                    col = int(input("Enter attack column (0-9): "))
-                    result = self.computer_board.receive_attack(row, col)
-                    if result != 'Already attacked':
-                        break
-                    print("You've already attacked this position. Try again.")
-                except ValueError:
-                    print("Invalid input. Please enter numbers.")
-
-            print(f"Your attack result: {result}")
-
-            # Computer's turn
-            while True:
-                row = random.randint(0, 9)
-                col = random.randint(0, 9)
-                result = self.player_board.receive_attack(row, col)
-                if result != 'Already attacked':
+            try:
+                move = input("\nEnter your move (e.g., A5): ").upper()
+                y = ord(move[0]) - ord('A')
+                x = int(move[1])
+                if 0 <= x < 10 and 0 <= y < 10:
                     break
+            except (ValueError, IndexError):
+                pass
+            print("Invalid input! Please enter a letter A-J followed by a number 0-9")
 
-            print(f"Computer attacked position ({row}, {col}): {result}")
+        result = game.computer_board.receive_attack((x, y))
+        print(result)
 
-            # Check for game over
-            if self.check_game_over():
+        # Computer's turn
+        while True:
+            x = random.randint(0, 9)
+            y = random.randint(0, 9)
+            if game.player_board.board[y][x] in [' ', 'S']:
                 break
+        
+        result = game.player_board.receive_attack((x, y))
+        print(f"Computer attacks {chr(65 + y)}{x}: {result}")
 
-    def check_game_over(self):
-        player_ships = sum(1 for row in self.player_board.board for cell in row if cell == 'S')
-        computer_ships = sum(1 for row in self.computer_board.board for cell in row if cell == 'S')
-
-        if player_ships == 0:
-            print("Game Over! Computer wins!")
-            return True
-        elif computer_ships == 0:
-            print("Congratulations! You win!")
-            return True
-        return False
+        # Check for win conditions
+        if all(ship.is_sunk() for ship in game.computer_board.ships):
+            print("\nCongratulations! You won!")
+            break
+        if all(ship.is_sunk() for ship in game.player_board.ships):
+            print("\nGame Over! The computer won!")
+            break
 
 if __name__ == "__main__":
-    print("Welcome to Battleship!")
-    game = Game()
-    game.play()
+    main()
