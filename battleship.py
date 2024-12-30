@@ -1,64 +1,23 @@
 import random
-from typing import List, Tuple, Dict
+from board import Board
+from player import Player
+from ship import Ship
 
-class Ship:
-    def __init__(self, name: str, size: int):
-        self.name = name
-        self.size = size
-        self.hits = 0
-        self.positions: List[Tuple[int, int]] = []
-
-    def is_sunk(self) -> bool:
-        return self.hits >= self.size
-
-class Board:
-    def __init__(self, size: int = 10):
-        self.size = size
-        self.board = [[' ' for _ in range(size)] for _ in range(size)]
-        self.ships: List[Ship] = []
-
-    def place_ship(self, ship: Ship, start_pos: Tuple[int, int], horizontal: bool) -> bool:
-        x, y = start_pos
-        positions = []
-
-        # Check if placement is valid
-        for i in range(ship.size):
-            new_x = x + (i if horizontal else 0)
-            new_y = y + (0 if horizontal else i)
-
-            if not (0 <= new_x < self.size and 0 <= new_y < self.size):
-                return False
-            if self.board[new_y][new_x] != ' ':
-                return False
-            positions.append((new_x, new_y))
-
-        # Place ship
-        for pos_x, pos_y in positions:
-            self.board[pos_y][pos_x] = 'S'
-        ship.positions = positions
-        self.ships.append(ship)
-        return True
-
-    def receive_attack(self, pos: Tuple[int, int]) -> str:
-        x, y = pos
-        if self.board[y][x] == 'S':
-            self.board[y][x] = 'H'
-            for ship in self.ships:
-                if pos in ship.positions:
-                    ship.hits += 1
-                    if ship.is_sunk():
-                        return f"You sunk my {ship.name}!"
-                    return "Hit!"
-        elif self.board[y][x] == ' ':
-            self.board[y][x] = 'M'
-            return "Miss!"
-        return "Already attacked this position!"
-
-class Game:
+class BattleshipGame:
     def __init__(self):
-        self.player_board = Board()
-        self.computer_board = Board()
-        self.ships = [
+        self.player = Player("Human")
+        self.computer = Player("Computer")
+        self.current_player = self.player
+
+    def setup_game(self):
+        print("Welcome to Battleship!")
+        print("\nPlace your ships on the board:")
+        self._place_ships(self.player, manual=True)
+        print("\nComputer is placing ships...")
+        self._place_ships(self.computer, manual=False)
+
+    def _place_ships(self, player, manual=False):
+        ships = [
             Ship("Carrier", 5),
             Ship("Battleship", 4),
             Ship("Cruiser", 3),
@@ -66,83 +25,75 @@ class Game:
             Ship("Destroyer", 2)
         ]
 
-    def setup_game(self):
-        # Place computer ships
-        for ship in self.ships:
-            while True:
-                x = random.randint(0, 9)
-                y = random.randint(0, 9)
-                horizontal = random.choice([True, False])
-                if self.computer_board.place_ship(Ship(ship.name, ship.size), (x, y), horizontal):
-                    break
-
-        # Place player ships (simplified for now - random placement)
-        for ship in self.ships:
-            while True:
-                x = random.randint(0, 9)
-                y = random.randint(0, 9)
-                horizontal = random.choice([True, False])
-                if self.player_board.place_ship(Ship(ship.name, ship.size), (x, y), horizontal):
-                    break
-
-    def display_boards(self):
-        print("\nYour Board:")
-        self._print_board(self.player_board)
-        print("\nComputer's Board:")
-        self._print_board(self.computer_board, hide_ships=True)
-
-    def _print_board(self, board: Board, hide_ships: bool = False):
-        print("  0 1 2 3 4 5 6 7 8 9")
-        for i in range(board.size):
-            row = chr(65 + i) + " "
-            for j in range(board.size):
-                cell = board.board[i][j]
-                if hide_ships and cell == 'S':
-                    row += '  '
+        for ship in ships:
+            placed = False
+            while not placed:
+                if manual:
+                    print(f"\nPlacing {ship.name} (length: {ship.length})")
+                    player.board.display()
+                    try:
+                        x = int(input("Enter x coordinate (0-9): "))
+                        y = int(input("Enter y coordinate (0-9): "))
+                        direction = input("Enter direction (h/v): ").lower()
+                        if direction not in ['h', 'v']:
+                            raise ValueError("Direction must be 'h' or 'v'")
+                    except ValueError as e:
+                        print(f"Invalid input: {e}")
+                        continue
                 else:
-                    row += cell + " "
-            print(row)
+                    x = random.randint(0, 9)
+                    y = random.randint(0, 9)
+                    direction = random.choice(['h', 'v'])
+
+                try:
+                    player.board.place_ship(ship, x, y, direction == 'h')
+                    placed = True
+                except ValueError as e:
+                    if manual:
+                        print(f"Cannot place ship: {e}")
+
+    def play(self):
+        self.setup_game()
+        game_over = False
+
+        while not game_over:
+            print(f"\n{self.current_player.name}'s turn")
+            if self.current_player == self.player:
+                print("\nYour board:")
+                self.player.board.display()
+                print("\nComputer's board:")
+                self.computer.board.display(hide_ships=True)
+
+                try:
+                    x = int(input("Enter x coordinate to attack (0-9): "))
+                    y = int(input("Enter y coordinate to attack (0-9): "))
+                    hit = self.computer.board.receive_attack(x, y)
+                except ValueError as e:
+                    print(f"Invalid input: {e}")
+                    continue
+            else:
+                x = random.randint(0, 9)
+                y = random.randint(0, 9)
+                hit = self.player.board.receive_attack(x, y)
+
+            if hit:
+                print(f"\n{self.current_player.name} hit a ship at ({x}, {y})!")
+                if self.current_player == self.player:
+                    if self.computer.board.all_ships_sunk():
+                        print("\nCongratulations! You won!")
+                        game_over = True
+                else:
+                    if self.player.board.all_ships_sunk():
+                        print("\nGame Over! Computer won!")
+                        game_over = True
+            else:
+                print(f"\n{self.current_player.name} missed at ({x}, {y})")
+
+            self.current_player = self.computer if self.current_player == self.player else self.player
 
 def main():
-    game = Game()
-    print("Welcome to Battleship!")
-    game.setup_game()
-
-    while True:
-        game.display_boards()
-        
-        # Player's turn
-        while True:
-            try:
-                move = input("\nEnter your move (e.g., A5): ").upper()
-                y = ord(move[0]) - ord('A')
-                x = int(move[1])
-                if 0 <= x < 10 and 0 <= y < 10:
-                    break
-            except (ValueError, IndexError):
-                pass
-            print("Invalid input! Please enter a letter A-J followed by a number 0-9")
-
-        result = game.computer_board.receive_attack((x, y))
-        print(result)
-
-        # Computer's turn
-        while True:
-            x = random.randint(0, 9)
-            y = random.randint(0, 9)
-            if game.player_board.board[y][x] in [' ', 'S']:
-                break
-        
-        result = game.player_board.receive_attack((x, y))
-        print(f"Computer attacks {chr(65 + y)}{x}: {result}")
-
-        # Check for win conditions
-        if all(ship.is_sunk() for ship in game.computer_board.ships):
-            print("\nCongratulations! You won!")
-            break
-        if all(ship.is_sunk() for ship in game.player_board.ships):
-            print("\nGame Over! The computer won!")
-            break
+    game = BattleshipGame()
+    game.play()
 
 if __name__ == "__main__":
     main()
